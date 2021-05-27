@@ -1,0 +1,16 @@
+version: '3.4'
+networks:
+  my_net:
+    external: true
+
+services:
+  spark:
+    build: .
+    image: spark
+    command: [ bash, start_spark.sh ]
+    volumes:
+      - ./app:/app
+    networks:
+      - my_net
+    external_links:
+      - database

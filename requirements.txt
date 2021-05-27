@@ -1,0 +1,10 @@
+amqp==2.6.0
+celery==4.3.0
+flower
+requests
+dataclasses_serialization
+dataclasses
+bson
+influxdb
+gensim==3.8.1
+pymongo

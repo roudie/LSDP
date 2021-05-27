@@ -1,0 +1,129 @@
+version: '3.4'
+
+volumes:
+  influxdb-storage:
+
+networks:
+  my_net:
+    external: true
+  net:
+    external: false
+
+services:
+  scheduler:
+    build: .
+    image: &img scheduler
+    command: [celery, worker, --app=worker.app, --beat, --loglevel=info]
+    environment: &env
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672
+      - CELERY_RESULT_BACKEND=rpc
+      - MONGO_URL=mongodb://localhost:27017/
+    depends_on:
+      - rabbitmq
+    volumes:
+      - ./app:/app
+    networks:
+      - net
+
+  worker_tasks_splitter:
+    build: .
+    image: *img
+    command: [ "celery", "worker", "--app=worker.app", "--hostname=worker.tasks_splitter@%h", "--queues=tasks_splitter_queue", "--loglevel=INFO" ]
+    environment: *env
+    depends_on:
+      - rabbitmq
+    volumes:
+      - ./app:/app
+    links:
+      - influxdb
+    networks:
+      - net
+
+  scraping_worker:
+    build: .
+    image: *img
+    command: [ "celery", "worker", "--app=worker.app", "--hostname=worker.scraping@%h", "--queues=scraping_queues", "--loglevel=warning", "--concurrency=4"]
+    environment: *env
+    depends_on:
+      - rabbitmq
+    volumes:
+      - ./app:/app
+    links:
+      - influxdb
+    networks:
+      - net
+
+  text_embeding_worker:
+    build: .
+    image: *img
+    command: [ "celery", "worker", "--app=worker.app", "--hostname=worker.embedding@%h", "--queues=emb_queue", "--loglevel=warning" ]
+    environment: *env
+    depends_on:
+      - rabbitmq
+    volumes:
+      - ./app:/app
+    networks:
+      - net
+
+  db_worker:
+    build: .
+    image: *img
+    command: [ "celery", "worker", "--app=worker.app", "--hostname=worker.embedding@%h", "--queues=db_queue", "--loglevel=warning" ]
+    environment: *env
+    depends_on:
+      - rabbitmq
+    volumes:
+      - ./app:/app
+    links:
+      - database
+    networks:
+      - net
+
+  rabbitmq:
+    image: rabbitmq:3.8
+    volumes:
+      - ./rabbitmq.conf/:/etc/rabbitmq/rabbitmq.conf
+    networks:
+      - net
+
+  influxdb:
+    image: influxdb:latest
+    container_name: influxdb
+    ports:
+      - "8083:8083"
+      - "8086:8086"
+      - "8090:8090"
+    volumes:
+      - influxdb-storage:/var/lib/influxdb
+    networks:
+      - net
+
+  grafana:
+    image: grafana/grafana:7.3.2
+    ports:
+      - "3000:3000"
+    links:
+      - influxdb
+    volumes:
+      - ./grafana_data:/var/lib/grafana
+    networks:
+      - net
+
+  database:
+    image: mongo
+    container_name: database
+    environment:
+      - MONGO_INITDB_DATABASE=db
+      - MONGO_INITDB_ROOT_USERNAME=userr
+      - MONGO_INITDB_ROOT_PASSWORD=userr
+    volumes:
+      - ./init-mongo.js:/mongo/init-mongo.js:ro
+      - ./mongo-volume:/data/db
+    ports:
+      - '27017-27019:27017-27019'
+    networks:
+      - my_net
+      - net
+
+
+
